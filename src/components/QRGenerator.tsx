@@ -2,7 +2,8 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { generateGBQR, GB_PALETTES, GBPalette } from "@/lib/gb-qr";
 import { toast } from "sonner";
 
-const FONT_URL = "https://fonts.gstatic.com/s/pressstart2p/v15/e3t4euO8T-267oIAQAu6jDQyK3nVivM.woff2";
+const FONT_URL =
+  "https://fonts.gstatic.com/s/pressstart2p/v15/e3t4euO8T-267oIAQAu6jDQyK3nVivM.woff2";
 const HISTORY_KEY = "gb-qr-history";
 
 interface HistoryEntry {
@@ -46,7 +47,10 @@ export function QRGenerator() {
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [donationsOpen, setDonationsOpen] = useState(false);
 
-  const lastGeneratedRef = useRef<{ exportPNG: () => Promise<Blob>; exportBase64: () => string } | null>(null);
+  const lastGeneratedRef = useRef<{
+    exportPNG: () => Promise<Blob>;
+    exportBase64: () => string;
+  } | null>(null);
 
   useEffect(() => {
     setHistory(loadHistory());
@@ -95,9 +99,10 @@ export function QRGenerator() {
         createdAt: Date.now(),
       };
 
-      setHistory(prevHistory => {
-        const filteredHistory = prevHistory.filter(h =>
-          !(h.data === data && h.title === title && h.subtitle === subtitle)
+      setHistory((prevHistory) => {
+        const filteredHistory = prevHistory.filter(
+          (h) =>
+            !(h.data === data && h.title === title && h.subtitle === subtitle),
         );
         const newHistory = [entry, ...filteredHistory].slice(0, 5);
         saveHistory(newHistory);
@@ -143,7 +148,9 @@ export function QRGenerator() {
     setQrSize(entry.qrSize);
 
     const presetIndex = GB_PALETTES.findIndex(
-      p => p.bgColor === entry.palette.bgColor && p.fgColor === entry.palette.fgColor
+      (p) =>
+        p.bgColor === entry.palette.bgColor &&
+        p.fgColor === entry.palette.fgColor,
     );
     if (presetIndex >= 0) {
       setUseCustomPalette(false);
@@ -157,7 +164,7 @@ export function QRGenerator() {
   };
 
   const deleteFromHistory = (id: string) => {
-    const newHistory = history.filter(h => h.id !== id);
+    const newHistory = history.filter((h) => h.id !== id);
     setHistory(newHistory);
     saveHistory(newHistory);
     toast.success("DELETED!");
@@ -177,7 +184,11 @@ export function QRGenerator() {
               rel="noopener noreferrer"
               className="hover:opacity-70 transition-opacity"
             >
-              <img src={"/icons/github.svg"} alt="GitHub" className="w-4 h-4 text-white" />
+              <img
+                src={"icons/github.svg"}
+                alt="GitHub"
+                className="w-4 h-4 text-white"
+              />
             </a>
             <a
               href="https://x.com/JimScope"
@@ -185,7 +196,7 @@ export function QRGenerator() {
               rel="noopener noreferrer"
               className="hover:opacity-70 transition-opacity"
             >
-              <img src={"/icons/x.svg"} alt="X" className="w-4 h-4 text-white" />
+              <img src={"icons/x.svg"} alt="X" className="w-4 h-4 text-white" />
             </a>
           </div>
           <h1 className="text-base sm:text-lg md:text-xl mb-2">GB QR STUDIO</h1>
@@ -312,7 +323,9 @@ export function QRGenerator() {
                   className="pixel-select"
                 >
                   {[1, 2, 3, 4, 5, 6, 8].map((s) => (
-                    <option key={s} value={s}>{s}X</option>
+                    <option key={s} value={s}>
+                      {s}X
+                    </option>
                   ))}
                 </select>
               </label>
@@ -325,7 +338,9 @@ export function QRGenerator() {
                   className="pixel-select"
                 >
                   {[2, 4, 6, 8, 10].map((p) => (
-                    <option key={p} value={p}>{p}PX</option>
+                    <option key={p} value={p}>
+                      {p}PX
+                    </option>
                   ))}
                 </select>
               </label>
@@ -338,7 +353,9 @@ export function QRGenerator() {
                   className="pixel-select"
                 >
                   {[32, 48, 64, 80, 96, 128].map((s) => (
-                    <option key={s} value={s}>{s}PX</option>
+                    <option key={s} value={s}>
+                      {s}PX
+                    </option>
                   ))}
                 </select>
               </label>
@@ -367,11 +384,13 @@ export function QRGenerator() {
                   src={previewSrc}
                   alt="Generated QR Code"
                   className="max-w-full max-h-[230px] sm:max-h-[280px]"
-                  style={{ imageRendering: 'pixelated' }}
+                  style={{ imageRendering: "pixelated" }}
                 />
               ) : (
                 <p className="text-[8px] text-center animate-pulse">
-                  PRESS GENERATE<br />TO CREATE QR
+                  PRESS GENERATE
+                  <br />
+                  TO CREATE QR
                 </p>
               )}
             </div>
@@ -379,16 +398,10 @@ export function QRGenerator() {
             {/* Export Buttons */}
             {previewSrc && (
               <div className="flex gap-2 mt-4">
-                <button
-                  onClick={handleExportPNG}
-                  className="pixel-btn flex-1"
-                >
+                <button onClick={handleExportPNG} className="pixel-btn flex-1">
                   SAVE PNG
                 </button>
-                <button
-                  onClick={handleCopyBase64}
-                  className="pixel-btn flex-1"
-                >
+                <button onClick={handleCopyBase64} className="pixel-btn flex-1">
                   COPY B64
                 </button>
               </div>
@@ -397,7 +410,9 @@ export function QRGenerator() {
             {/* History */}
             {history.length > 0 && (
               <div className="mt-4">
-                <h3 className="text-[8px] border-t border-border pt-2 mb-2">&gt; HISTORY</h3>
+                <h3 className="text-[8px] border-t border-border pt-2 mb-2">
+                  &gt; HISTORY
+                </h3>
                 <div className="space-y-1 max-h-[200px] overflow-y-auto">
                   {history.map((entry) => (
                     <div
@@ -408,8 +423,14 @@ export function QRGenerator() {
                         className="w-3 h-3 border border-foreground shrink-0"
                         style={{ backgroundColor: entry.palette.bgColor }}
                       />
-                      <div className="flex-1 min-w-0 truncate" title={entry.data}>
-                        {entry.title} - {entry.data.length > 15 ? entry.data.slice(0, 15) + "..." : entry.data}
+                      <div
+                        className="flex-1 min-w-0 truncate"
+                        title={entry.data}
+                      >
+                        {entry.title} -{" "}
+                        {entry.data.length > 15
+                          ? entry.data.slice(0, 15) + "..."
+                          : entry.data}
                       </div>
                       <button
                         onClick={() => loadFromHistory(entry)}
@@ -443,21 +464,44 @@ export function QRGenerator() {
           {donationsOpen && (
             <div className="space-y-2">
               {[
-                { name: "USDT (BEP20)", address: "0x4eF10F4a369d5d85Ea3E64Ec5ACbF5Fd6B3CEdaF" },
-                { name: "BTC", address: "bc1qv3jlaq8u5jvcfd3ur9ew4dr98eg7f6lqpaag03" },
-                { name: "ETH", address: "0x4ef10f4a369d5d85ea3e64ec5acbf5fd6b3cedaf" },
-                { name: "SOL", address: "9Dpbj7RGWbLXdwX7nyfHDcUr6p7GAoffbzVkDjYzdyC9" },
-                { name: "BNB", address: "0x4ef10f4a369d5d85ea3e64ec5acbf5fd6b3cedaf" },
-                { name: "USDT (ETH)", address: "0x4ef10f4a369d5d85ea3e64ec5acbf5fd6b3cedaf" },
-                { name: "USDC (ETH)", address: "0x4ef10f4a369d5d85ea3e64ec5acbf5fd6b3cedaf" },
+                {
+                  name: "USDT (BEP20)",
+                  address: "0x4eF10F4a369d5d85Ea3E64Ec5ACbF5Fd6B3CEdaF",
+                },
+                {
+                  name: "BTC",
+                  address: "bc1qv3jlaq8u5jvcfd3ur9ew4dr98eg7f6lqpaag03",
+                },
+                {
+                  name: "ETH",
+                  address: "0x4ef10f4a369d5d85ea3e64ec5acbf5fd6b3cedaf",
+                },
+                {
+                  name: "SOL",
+                  address: "9Dpbj7RGWbLXdwX7nyfHDcUr6p7GAoffbzVkDjYzdyC9",
+                },
+                {
+                  name: "BNB",
+                  address: "0x4ef10f4a369d5d85ea3e64ec5acbf5fd6b3cedaf",
+                },
+                {
+                  name: "USDT (ETH)",
+                  address: "0x4ef10f4a369d5d85ea3e64ec5acbf5fd6b3cedaf",
+                },
+                {
+                  name: "USDC (ETH)",
+                  address: "0x4ef10f4a369d5d85ea3e64ec5acbf5fd6b3cedaf",
+                },
                 { name: "TRX", address: "TX88qET5JLUd7WmbAF6S4NJoZmdXHeKQVd" },
               ].map((crypto) => (
                 <div
                   key={crypto.name}
                   className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2 p-2 bg-muted/30 border border-border text-[8px]"
                 >
-                  <span className="font-bold min-w-[80px]">{crypto.name}:</span>
-                  <span className="break-all flex-1 text-muted-foreground">{crypto.address}</span>
+                  <span className="font-bold min-w-20">{crypto.name}:</span>
+                  <span className="break-all flex-1 text-muted-foreground">
+                    {crypto.address}
+                  </span>
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(crypto.address);
