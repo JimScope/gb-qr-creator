@@ -38,14 +38,14 @@ export function QRGenerator() {
   const [useCustomPalette, setUseCustomPalette] = useState(false);
   const [customBgColor, setCustomBgColor] = useState("#9bbc0f");
   const [customFgColor, setCustomFgColor] = useState("#0f380f");
-  const [scale, setScale] = useState(4);
+  const [scale, setScale] = useState(1);
   const [padding, setPadding] = useState(4);
   const [qrSize, setQrSize] = useState(64);
   const [isGenerating, setIsGenerating] = useState(false);
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [donationsOpen, setDonationsOpen] = useState(false);
-  
+
   const lastGeneratedRef = useRef<{ exportPNG: () => Promise<Blob>; exportBase64: () => string } | null>(null);
 
   useEffect(() => {
@@ -94,9 +94,9 @@ export function QRGenerator() {
         qrSize,
         createdAt: Date.now(),
       };
-      
+
       setHistory(prevHistory => {
-        const filteredHistory = prevHistory.filter(h => 
+        const filteredHistory = prevHistory.filter(h =>
           !(h.data === data && h.title === title && h.subtitle === subtitle)
         );
         const newHistory = [entry, ...filteredHistory].slice(0, 5);
@@ -115,7 +115,7 @@ export function QRGenerator() {
 
   const handleExportPNG = useCallback(async () => {
     if (!lastGeneratedRef.current) return;
-    
+
     const blob = await lastGeneratedRef.current.exportPNG();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -128,7 +128,7 @@ export function QRGenerator() {
 
   const handleCopyBase64 = useCallback(async () => {
     if (!lastGeneratedRef.current) return;
-    
+
     const base64 = lastGeneratedRef.current.exportBase64();
     await navigator.clipboard.writeText(base64);
     toast.success("BASE64 COPIED!");
@@ -141,7 +141,7 @@ export function QRGenerator() {
     setScale(entry.scale);
     setPadding(entry.padding);
     setQrSize(entry.qrSize);
-    
+
     const presetIndex = GB_PALETTES.findIndex(
       p => p.bgColor === entry.palette.bgColor && p.fgColor === entry.palette.fgColor
     );
@@ -251,7 +251,7 @@ export function QRGenerator() {
                   CUSTOM
                 </label>
               </div>
-              
+
               {!useCustomPalette ? (
                 <select
                   value={paletteIndex}
@@ -286,7 +286,7 @@ export function QRGenerator() {
                   </label>
                 </div>
               )}
-              
+
               {/* Palette Preview */}
               <div className="flex gap-1 mt-2">
                 <div
@@ -363,9 +363,9 @@ export function QRGenerator() {
             {/* Canvas Preview */}
             <div className="pixel-screen scanlines min-h-[250px] sm:min-h-[300px] flex items-center justify-center overflow-hidden">
               {previewSrc ? (
-                <img 
-                  src={previewSrc} 
-                  alt="Generated QR Code" 
+                <img
+                  src={previewSrc}
+                  alt="Generated QR Code"
                   className="max-w-full max-h-[230px] sm:max-h-[280px]"
                   style={{ imageRendering: 'pixelated' }}
                 />
