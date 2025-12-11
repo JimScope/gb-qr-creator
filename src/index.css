@@ -1,0 +1,261 @@
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap')
+layer(base);
+
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+  @media (width >= --theme(--breakpoint-sm)) {
+    max-width: none;
+  }
+  @media (width >= 1400px) {
+    max-width: 1400px;
+  }
+}
+
+@theme {
+  --font-pixel: 'Press Start 2P', monospace;
+
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-gb-lightest: hsl(var(--gb-lightest));
+  --color-gb-light: hsl(var(--gb-light));
+  --color-gb-dark: hsl(var(--gb-dark));
+  --color-gb-darkest: hsl(var(--gb-darkest));
+
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
+
+@utility pixel-btn {
+  @apply relative px-4 py-2 font-pixel text-xs uppercase tracking-wider;
+  @apply bg-primary text-primary-foreground;
+  @apply transition-all duration-75;
+  box-shadow:
+    inset calc(var(--pixel) * -1) calc(var(--pixel) * -1) 0 0
+      hsl(var(--pokemon-blue-dark)),
+    inset var(--pixel) var(--pixel) 0 0 hsl(210 90% 60%);
+
+  &:hover {
+    @apply bg-secondary;
+    box-shadow:
+      inset calc(var(--pixel) * -1) calc(var(--pixel) * -1) 0 0 hsl(0 80% 35%),
+      inset var(--pixel) var(--pixel) 0 0 hsl(0 80% 65%);
+  }
+
+  &:active {
+    box-shadow:
+      inset var(--pixel) var(--pixel) 0 0 hsl(var(--pokemon-blue-dark)),
+      inset calc(var(--pixel) * -1) calc(var(--pixel) * -1) 0 0 hsl(210 90% 60%);
+  }
+}
+
+@utility pixel-input {
+  @apply w-full px-3 py-2 font-pixel text-xs;
+  @apply bg-card text-foreground;
+  @apply outline-hidden;
+  box-shadow:
+    inset var(--pixel) var(--pixel) 0 0 hsl(var(--border)),
+    inset calc(var(--pixel) * -1) calc(var(--pixel) * -1) 0 0 hsl(0 0% 100%);
+
+  &:focus {
+    box-shadow:
+      inset var(--pixel) var(--pixel) 0 0 hsl(var(--primary)),
+      inset calc(var(--pixel) * -1) calc(var(--pixel) * -1) 0 0 hsl(0 0% 100%),
+      0 0 0 var(--pixel) hsl(var(--primary));
+  }
+}
+
+@utility pixel-select {
+  @apply w-full px-3 py-2 font-pixel text-xs cursor-pointer;
+  @apply bg-card text-foreground;
+  @apply outline-hidden appearance-none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3E%3Cpath fill='%231a2a3a' d='M0 2h8L4 6z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 24px;
+  box-shadow:
+    inset var(--pixel) var(--pixel) 0 0 hsl(var(--border)),
+    inset calc(var(--pixel) * -1) calc(var(--pixel) * -1) 0 0 hsl(0 0% 100%);
+}
+
+@utility pixel-card {
+  @apply p-4 bg-card;
+  box-shadow:
+    inset calc(var(--pixel) * -1) calc(var(--pixel) * -1) 0 0 hsl(var(--border)),
+    inset var(--pixel) var(--pixel) 0 0 hsl(0 0% 100%),
+    0 0 0 var(--pixel) hsl(var(--foreground));
+}
+
+@utility pixel-screen {
+  @apply relative bg-card p-4;
+  box-shadow:
+    inset var(--pixel) var(--pixel) 0 0 hsl(var(--border)),
+    inset calc(var(--pixel) * -1) calc(var(--pixel) * -1) 0 0 hsl(0 0% 100%),
+    0 0 0 calc(var(--pixel) * 2) hsl(var(--foreground));
+}
+
+@utility pixel-header {
+  /* Header styles */
+  @apply p-4 bg-primary text-primary-foreground text-center;
+  box-shadow:
+    inset calc(var(--pixel) * -1) calc(var(--pixel) * -1) 0 0
+      hsl(var(--pokemon-blue-dark)),
+    inset var(--pixel) var(--pixel) 0 0 hsl(210 90% 60%),
+    0 0 0 var(--pixel) hsl(var(--foreground));
+}
+
+@utility cursor-blink {
+  /* Blinking cursor animation */
+
+  &::after {
+    content: '_';
+    animation: blink 1s infinite;
+  }
+}
+
+/* Pokemon-style Pixel Art Design System */
+@layer base {
+  :root {
+    /* Pokemon-inspired palette - clean and readable */
+    --pokemon-white: 0 0% 98%;
+    --pokemon-cream: 45 30% 96%;
+    --pokemon-blue: 210 90% 45%;
+    --pokemon-blue-dark: 210 95% 30%;
+    --pokemon-red: 0 80% 50%;
+    --pokemon-gray: 210 10% 40%;
+    --pokemon-dark: 210 20% 15%;
+
+    /* Semantic tokens */
+    --background: 45 30% 96%;
+    --foreground: 210 20% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 210 20% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 210 20% 15%;
+
+    --primary: 210 90% 45%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 80% 50%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 210 10% 85%;
+    --muted-foreground: 210 10% 40%;
+
+    --accent: 210 90% 45%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 80% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 210 20% 70%;
+    --input: 210 20% 85%;
+    --ring: 210 90% 45%;
+
+    --radius: 0px;
+    --pixel: 4px;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+    image-rendering: pixelated;
+  }
+
+  body {
+    @apply bg-background text-foreground font-pixel antialiased;
+    font-size: 10px;
+  }
+
+  /* Pixel art border utility */
+  .pixel-border {
+    box-shadow: 
+      inset calc(var(--pixel) * -1) calc(var(--pixel) * -1) 0 0 hsl(var(--border)),
+      inset var(--pixel) var(--pixel) 0 0 hsl(0 0% 100%),
+      0 0 0 var(--pixel) hsl(var(--foreground));
+  }
+
+  .pixel-border-inset {
+    box-shadow: 
+      inset var(--pixel) var(--pixel) 0 0 hsl(var(--border)),
+      inset calc(var(--pixel) * -1) calc(var(--pixel) * -1) 0 0 hsl(0 0% 100%),
+      0 0 0 var(--pixel) hsl(var(--foreground));
+  }
+}
+
+@layer components {
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+}
