@@ -1,81 +1,79 @@
-import { useState, useCallback, useRef, useEffect } from "react";
-import { generateGBQR, GB_PALETTES, GBPalette, loadFont } from "@/lib/gb-qr";
-import JSZip from "jszip";
+import { useEffect } from "react";
+import { IHistoryEntry, useHistory } from "@/hooks/useHistory";
+import { usePalette } from "@/hooks/usePalette";
+import { useBatch } from "@/hooks/useBatch";
+import { useQRGenerator } from "@/hooks/useQRGenerator";
+import { generateGBQR, GB_PALETTES, loadFont } from "@/lib/gb-qr";
+import { FONT_URL, safeName } from "@/utils/utils";
 import { toast } from "sonner";
-
-const FONT_URL =
-  "https://fonts.gstatic.com/s/pressstart2p/v15/e3t4euO8T-267oIAQAu6jDQyK3nVivM.woff2";
-const HISTORY_KEY = "gb-qr-history";
-
-interface HistoryEntry {
-  id: string;
-  title: string;
-  subtitle: string;
-  data: string;
-  palette: GBPalette;
-  scale: number;
-  padding: number;
-  qrSize: number;
-  createdAt: number;
-}
-
-function loadHistory(): HistoryEntry[] {
-  try {
-    const stored = localStorage.getItem(HISTORY_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(history: HistoryEntry[]) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 5)));
-}
+import JSZip from "jszip";
 
 export function QRGenerator() {
-  const [title, setTitle] = useState("GAME BOY");
-  const [subtitle, setSubtitle] = useState("SCAN ME");
-  const [data, setData] = useState("https://jimscope.com");
-  const [paletteIndex, setPaletteIndex] = useState(0);
-  const [useCustomPalette, setUseCustomPalette] = useState(false);
-  const [customBgColor, setCustomBgColor] = useState("#9bbc0f");
-  const [customFgColor, setCustomFgColor] = useState("#0f380f");
-  const [scale, setScale] = useState(1);
-  const [padding, setPadding] = useState(4);
-  const [qrSize, setQrSize] = useState(64);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [donationsOpen, setDonationsOpen] = useState(false);
-  const [batchMode, setBatchMode] = useState(false);
-  const [batchType, setBatchType] = useState<"lines" | "csv">("csv");
-  const [batchInput, setBatchInput] = useState("");
-  const [parsedCount, setParsedCount] = useState(0);
-  const [zipMode, setZipMode] = useState(true);
+  const { history, addToHistory, deleteFromHistory } = useHistory();
 
-  const lastGeneratedRef = useRef<{
-    exportPNG: () => Promise<Blob>;
-    exportBase64: () => string;
-  } | null>(null);
+  const {
+    paletteIndex,
+    setPaletteIndex,
+    useCustomPalette,
+    setUseCustomPalette,
+    customBgColor,
+    setCustomBgColor,
+    customFgColor,
+    setCustomFgColor,
+    getCurrentPalette,
+    resetToPreset,
+  } = usePalette();
+
+  const {
+    batchMode,
+    setBatchMode,
+    batchType,
+    setBatchType,
+    batchInput,
+    setBatchInput,
+    parsedCount,
+    zipMode,
+    setZipMode,
+    parseLines,
+    parseCSV,
+    handleCSVFile,
+  } = useBatch();
+
+  const {
+    title,
+    setTitle,
+    subtitle,
+    setSubtitle,
+    data,
+    setData,
+    scale,
+    setScale,
+    padding,
+    setPadding,
+    qrSize,
+    setQrSize,
+    isGenerating,
+    previewSrc,
+    setPreviewSrc,
+    donationsOpen,
+    setDonationsOpen,
+    lastGeneratedRef,
+    handleExportPNG,
+    handleCopyBase64,
+  } = useQRGenerator();
 
   useEffect(() => {
-    setHistory(loadHistory());
+    const savedHistory = JSON.parse(
+      localStorage.getItem("gbqr-history") || "[]",
+    );
   }, []);
 
-  const getCurrentPalette = useCallback((): GBPalette => {
-    if (useCustomPalette) {
-      return { name: "Custom", bgColor: customBgColor, fgColor: customFgColor };
-    }
-    return GB_PALETTES[paletteIndex];
-  }, [useCustomPalette, customBgColor, customFgColor, paletteIndex]);
-
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = async () => {
     if (!data.trim()) {
       toast.error("ENTER QR DATA!");
       return;
     }
 
-    setIsGenerating(true);
     try {
       const palette = getCurrentPalette();
       const result = await generateGBQR({
@@ -89,11 +87,16 @@ export function QRGenerator() {
         qrSize,
       });
 
-      lastGeneratedRef.current = result;
-      setPreviewSrc(result.exportBase64());
+      if (lastGeneratedRef.current) {
+        lastGeneratedRef.current.exportPNG = result.exportPNG;
+        lastGeneratedRef.current.exportBase64 = result.exportBase64;
+      }
 
-      // Add to history (keep up to 5 unique entries)
-      const entry: HistoryEntry = {
+      if (result.canvas) {
+        setPreviewSrc(result.exportBase64());
+      }
+
+      const entry = {
         id: Date.now().toString(),
         title,
         subtitle,
@@ -105,155 +108,43 @@ export function QRGenerator() {
         createdAt: Date.now(),
       };
 
-      setHistory((prevHistory) => {
-        const filteredHistory = prevHistory.filter(
-          (h) =>
-            !(h.data === data && h.title === title && h.subtitle === subtitle),
-        );
-        const newHistory = [entry, ...filteredHistory].slice(0, 5);
-        saveHistory(newHistory);
-        return newHistory;
-      });
-
+      addToHistory(entry);
       toast.success("QR GENERATED!");
     } catch (error) {
       console.error(error);
       toast.error("GENERATION FAILED!");
-    } finally {
-      setIsGenerating(false);
     }
-  }, [title, subtitle, data, getCurrentPalette, scale, padding, qrSize]);
-
-  const handleExportPNG = useCallback(async () => {
-    if (!lastGeneratedRef.current) return;
-
-    const blob = await lastGeneratedRef.current.exportPNG();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `gb-qr-${Date.now()}.png`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("PNG DOWNLOADED!");
-  }, []);
-
-  const handleCopyBase64 = useCallback(async () => {
-    if (!lastGeneratedRef.current) return;
-
-    const base64 = lastGeneratedRef.current.exportBase64();
-    await navigator.clipboard.writeText(base64);
-    toast.success("BASE64 COPIED!");
-  }, []);
-
-  const splitCSVLine = useCallback((line: string): string[] => {
-    const out: string[] = [];
-    let cur = "";
-    let inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        inQ = !inQ;
-        continue;
-      }
-      if (ch === "," && !inQ) {
-        out.push(cur);
-        cur = "";
-      } else {
-        cur += ch;
-      }
-    }
-    out.push(cur);
-    return out;
-  }, []);
-
-  const parseLines = useCallback(
-    (text: string) =>
-      text
-        .split(/\r?\n/)
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .map((line) => {
-          const [data, title, subtitle, name] = splitCSVLine(line).map((p) =>
-            p.trim(),
-          );
-          return {
-            data,
-            title,
-            subtitle,
-            name: name ?? `gbqr-${Math.random().toString(36).slice(2, 6)}`,
-          };
-        }),
-    [splitCSVLine],
-  );
-
-  const parseCSV = useCallback(
-    (text: string) => {
-      const rows = text
-        .split(/\r?\n/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const items: {
-        data: string;
-        title: string;
-        subtitle: string;
-        name: string;
-      }[] = [];
-
-      for (const row of rows) {
-        const parts = splitCSVLine(row).map((p) => p.trim());
-        const data = parts[0];
-        if (!data) continue;
-
-        const title = parts[1] ?? "";
-        const subtitle = parts[2] ?? "";
-        const name = parts[3] ?? `gbqr-${items.length + 1}`;
-
-        items.push({ data, title, subtitle, name });
-      }
-      return items;
-    },
-    [splitCSVLine],
-  );
-
-  const safeName = (name: string) =>
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9-_]+/g, "-")
-      .replace(/^-+|-+$/g, "");
-
-  useEffect(() => {
-    const count =
-      batchType === "csv"
-        ? parseCSV(batchInput).length
-        : parseLines(batchInput).length;
-    setParsedCount(count);
-  }, [batchInput, batchType, parseCSV, parseLines]);
-
-  const handleCSVFile = async (file?: File) => {
-    if (!file) return;
-    const text = await file.text();
-    setBatchInput(text);
   };
 
-  const handleGenerateBatch = useCallback(async () => {
+  const loadFromHistory = (entry: IHistoryEntry) => {
+    setTitle(entry.title);
+    setSubtitle(entry.subtitle);
+    setData(entry.data);
+    setScale(entry.scale);
+    setPadding(entry.padding);
+    setQrSize(entry.qrSize);
+
+    resetToPreset(entry.palette);
+    toast.success("LOADED FROM HISTORY!");
+  };
+
+  const handleGenerateBatch = async () => {
     const items =
       batchType === "csv" ? parseCSV(batchInput) : parseLines(batchInput);
     if (items.length === 0) {
       toast.error("NO INPUT");
       return;
     }
-    setIsGenerating(true);
+
     try {
       const palette = getCurrentPalette();
 
-      // Preload font (with cache + document.fonts.ready inside)
       await loadFont(FONT_URL);
 
       if (zipMode) {
         const zip = new JSZip();
         for (let i = 0; i < items.length; i++) {
           const it = items[i];
-          // Use item title/subtitle or fallback to form values
           const itemTitle = it.title && it.title.length ? it.title : title;
           const itemSubtitle =
             it.subtitle && it.subtitle.length ? it.subtitle : subtitle;
@@ -270,7 +161,6 @@ export function QRGenerator() {
           });
           const blob = await result.exportPNG();
           zip.file(`${safeName(it.name)}.png`, blob);
-          // tiny throttle so browser doesn't get overwhelmed
           await new Promise((r) => setTimeout(r, 6));
         }
         const zipBlob = await zip.generateAsync({ type: "blob" });
@@ -312,52 +202,7 @@ export function QRGenerator() {
     } catch (e) {
       console.error(e);
       toast.error("BATCH FAILED!");
-    } finally {
-      setIsGenerating(false);
     }
-  }, [
-    batchInput,
-    batchType,
-    getCurrentPalette,
-    title,
-    subtitle,
-    scale,
-    padding,
-    qrSize,
-    parseCSV,
-    parseLines,
-    zipMode,
-  ]);
-
-  const loadFromHistory = (entry: HistoryEntry) => {
-    setTitle(entry.title);
-    setSubtitle(entry.subtitle);
-    setData(entry.data);
-    setScale(entry.scale);
-    setPadding(entry.padding);
-    setQrSize(entry.qrSize);
-
-    const presetIndex = GB_PALETTES.findIndex(
-      (p) =>
-        p.bgColor === entry.palette.bgColor &&
-        p.fgColor === entry.palette.fgColor,
-    );
-    if (presetIndex >= 0) {
-      setUseCustomPalette(false);
-      setPaletteIndex(presetIndex);
-    } else {
-      setUseCustomPalette(true);
-      setCustomBgColor(entry.palette.bgColor);
-      setCustomFgColor(entry.palette.fgColor);
-    }
-    toast.success("LOADED FROM HISTORY!");
-  };
-
-  const deleteFromHistory = (id: string) => {
-    const newHistory = history.filter((h) => h.id !== id);
-    setHistory(newHistory);
-    saveHistory(newHistory);
-    toast.success("DELETED!");
   };
 
   const currentPalette = getCurrentPalette();
@@ -686,7 +531,7 @@ export function QRGenerator() {
                   &gt; HISTORY
                 </h3>
                 <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                  {history.map((entry) => (
+                  {history.map((entry: IHistoryEntry) => (
                     <div
                       key={entry.id}
                       className="flex items-center gap-1 sm:gap-2 p-2 bg-muted/50 border border-border text-[8px]"
