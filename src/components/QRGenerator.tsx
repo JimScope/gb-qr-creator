@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { generateGBQR, GB_PALETTES, GBPalette } from "@/lib/gb-qr";
+import { generateGBQR, GB_PALETTES, GBPalette, loadFont } from "@/lib/gb-qr";
+import JSZip from "jszip";
 import { toast } from "sonner";
 
 const FONT_URL =
@@ -46,6 +47,11 @@ export function QRGenerator() {
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [donationsOpen, setDonationsOpen] = useState(false);
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchType, setBatchType] = useState<"lines" | "csv">("csv");
+  const [batchInput, setBatchInput] = useState("");
+  const [parsedCount, setParsedCount] = useState(0);
+  const [zipMode, setZipMode] = useState(true);
 
   const lastGeneratedRef = useRef<{
     exportPNG: () => Promise<Blob>;
@@ -139,6 +145,190 @@ export function QRGenerator() {
     toast.success("BASE64 COPIED!");
   }, []);
 
+  const splitCSVLine = useCallback((line: string): string[] => {
+    const out: string[] = [];
+    let cur = "";
+    let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') {
+        inQ = !inQ;
+        continue;
+      }
+      if (ch === "," && !inQ) {
+        out.push(cur);
+        cur = "";
+      } else {
+        cur += ch;
+      }
+    }
+    out.push(cur);
+    return out;
+  }, []);
+
+  const parseLines = useCallback(
+    (text: string) =>
+      text
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const [data, title, subtitle, name] = splitCSVLine(line).map((p) =>
+            p.trim(),
+          );
+          return {
+            data,
+            title,
+            subtitle,
+            name: name ?? `gbqr-${Math.random().toString(36).slice(2, 6)}`,
+          };
+        }),
+    [splitCSVLine],
+  );
+
+  const parseCSV = useCallback(
+    (text: string) => {
+      const rows = text
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      const items: {
+        data: string;
+        title: string;
+        subtitle: string;
+        name: string;
+      }[] = [];
+
+      for (const row of rows) {
+        const parts = splitCSVLine(row).map((p) => p.trim());
+        const data = parts[0];
+        if (!data) continue;
+
+        const title = parts[1] ?? "";
+        const subtitle = parts[2] ?? "";
+        const name = parts[3] ?? `gbqr-${items.length + 1}`;
+
+        items.push({ data, title, subtitle, name });
+      }
+      return items;
+    },
+    [splitCSVLine],
+  );
+
+  const safeName = (name: string) =>
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9-_]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+  useEffect(() => {
+    const count =
+      batchType === "csv"
+        ? parseCSV(batchInput).length
+        : parseLines(batchInput).length;
+    setParsedCount(count);
+  }, [batchInput, batchType, parseCSV, parseLines]);
+
+  const handleCSVFile = async (file?: File) => {
+    if (!file) return;
+    const text = await file.text();
+    setBatchInput(text);
+  };
+
+  const handleGenerateBatch = useCallback(async () => {
+    const items =
+      batchType === "csv" ? parseCSV(batchInput) : parseLines(batchInput);
+    if (items.length === 0) {
+      toast.error("NO INPUT");
+      return;
+    }
+    setIsGenerating(true);
+    try {
+      const palette = getCurrentPalette();
+
+      // Preload font (with cache + document.fonts.ready inside)
+      await loadFont(FONT_URL);
+
+      if (zipMode) {
+        const zip = new JSZip();
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          // Use item title/subtitle or fallback to form values
+          const itemTitle = it.title && it.title.length ? it.title : title;
+          const itemSubtitle =
+            it.subtitle && it.subtitle.length ? it.subtitle : subtitle;
+
+          const result = await generateGBQR({
+            title: itemTitle,
+            subtitle: itemSubtitle,
+            data: it.data,
+            palette,
+            fontUrl: FONT_URL,
+            scale,
+            padding,
+            qrSize,
+          });
+          const blob = await result.exportPNG();
+          zip.file(`${safeName(it.name)}.png`, blob);
+          // tiny throttle so browser doesn't get overwhelmed
+          await new Promise((r) => setTimeout(r, 6));
+        }
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `gbqr-batch-${Date.now()}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success(`EXPORTED ZIP WITH ${items.length} PNGS`);
+      } else {
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          const itemTitle = it.title && it.title.length ? it.title : title;
+          const itemSubtitle =
+            it.subtitle && it.subtitle.length ? it.subtitle : subtitle;
+
+          const result = await generateGBQR({
+            title: itemTitle,
+            subtitle: itemSubtitle,
+            data: it.data,
+            palette,
+            fontUrl: FONT_URL,
+            scale,
+            padding,
+            qrSize,
+          });
+          const blob = await result.exportPNG();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${safeName(it.name)}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+          await new Promise((r) => setTimeout(r, 10));
+        }
+        toast.success(`EXPORTED ${items.length} PNGS`);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("BATCH FAILED!");
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [
+    batchInput,
+    batchType,
+    getCurrentPalette,
+    title,
+    subtitle,
+    scale,
+    padding,
+    qrSize,
+    parseCSV,
+    parseLines,
+    zipMode,
+  ]);
+
   const loadFromHistory = (entry: HistoryEntry) => {
     setTitle(entry.title);
     setSubtitle(entry.subtitle);
@@ -213,40 +403,42 @@ export function QRGenerator() {
             </h2>
 
             {/* Text Inputs */}
-            <div className="space-y-3">
-              <label className="block">
-                <span className="text-[8px] block mb-1">TITLE:</span>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="pixel-input"
-                  maxLength={12}
-                />
-              </label>
+            {!batchMode && (
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="text-[8px] block mb-1">TITLE:</span>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="pixel-input"
+                    maxLength={12}
+                  />
+                </label>
 
-              <label className="block">
-                <span className="text-[8px] block mb-1">SUBTITLE:</span>
-                <input
-                  type="text"
-                  value={subtitle}
-                  onChange={(e) => setSubtitle(e.target.value)}
-                  className="pixel-input"
-                  maxLength={12}
-                />
-              </label>
+                <label className="block">
+                  <span className="text-[8px] block mb-1">SUBTITLE:</span>
+                  <input
+                    type="text"
+                    value={subtitle}
+                    onChange={(e) => setSubtitle(e.target.value)}
+                    className="pixel-input"
+                    maxLength={12}
+                  />
+                </label>
 
-              <label className="block">
-                <span className="text-[8px] block mb-1">QR DATA:</span>
-                <input
-                  type="text"
-                  value={data}
-                  onChange={(e) => setData(e.target.value)}
-                  className="pixel-input"
-                  placeholder="URL or text..."
-                />
-              </label>
-            </div>
+                <label className="block">
+                  <span className="text-[8px] block mb-1">QR DATA:</span>
+                  <input
+                    type="text"
+                    value={data}
+                    onChange={(e) => setData(e.target.value)}
+                    className="pixel-input"
+                    placeholder="URL or text..."
+                  />
+                </label>
+              </div>
+            )}
 
             {/* Palette Selection */}
             <div>
@@ -361,14 +553,94 @@ export function QRGenerator() {
               </label>
             </div>
 
-            {/* Generate Button */}
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              className="pixel-btn w-full py-3 text-sm"
-            >
-              {isGenerating ? "GENERATING..." : "GENERATE QR"}
-            </button>
+            {/* Batch */}
+            <div className="mt-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-[8px]">
+                  <input
+                    type="checkbox"
+                    checked={batchMode}
+                    onChange={(e) => setBatchMode(e.target.checked)}
+                    className="w-3 h-3"
+                  />
+                  BATCH MODE
+                </label>
+                {batchMode && (
+                  <span className="text-[8px]">PARSED: {parsedCount}</span>
+                )}
+              </div>
+
+              {batchMode ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block">
+                      <span className="text-[8px] block mb-1">INPUT TYPE:</span>
+                      <select
+                        value={batchType}
+                        onChange={(e) =>
+                          setBatchType(e.target.value as "lines" | "csv")
+                        }
+                        className="pixel-select"
+                      >
+                        <option value="csv">CSV</option>
+                        <option value="lines">LINES</option>
+                      </select>
+                    </label>
+                    {batchType === "csv" && (
+                      <label className="block">
+                        <span className="text-[8px] block mb-1">CSV FILE:</span>
+                        <input
+                          type="file"
+                          accept=".csv,text/csv"
+                          onChange={(e) => handleCSVFile(e.target.files?.[0])}
+                          className="w-full text-[10px]"
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <label className="flex items-center gap-2 text-[8px]">
+                    <input
+                      type="checkbox"
+                      checked={zipMode}
+                      onChange={(e) => setZipMode(e.target.checked)}
+                      className="w-3 h-3"
+                    />
+                    ZIP DOWNLOAD
+                  </label>
+                  {batchType === "lines" && (
+                    <label className="block">
+                      <span className="text-[8px] block mb-1">PASTE HERE:</span>
+                      <textarea
+                        value={batchInput}
+                        onChange={(e) => setBatchInput(e.target.value)}
+                        className="pixel-input h-24"
+                        placeholder={
+                          "Formato: data,title,subtitle,name\n" +
+                          "Ejemplos:\n" +
+                          "https://example.com,GAME BOY,SCAN ME,example-qr\n" +
+                          "https://midominio.com,MY TITLE,MY SUBTITLE,qr-123"
+                        }
+                      />
+                    </label>
+                  )}
+                  <button
+                    onClick={handleGenerateBatch}
+                    disabled={isGenerating || parsedCount === 0}
+                    className="pixel-btn w-full py-3 text-sm"
+                  >
+                    {isGenerating ? "GENERATING..." : "GENERATE BATCH"}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleGenerate}
+                  disabled={isGenerating}
+                  className="pixel-btn w-full py-3 text-sm"
+                >
+                  {isGenerating ? "GENERATING..." : "GENERATE QR"}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Preview Panel */}
