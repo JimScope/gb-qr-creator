@@ -9,9 +9,9 @@ export interface GBPalette {
 export interface GenerateOptions {
   title: string;
   subtitle: string;
-  data: string;                     
-  palette: GBPalette;               
-  fontUrl: string;                  
+  data: string;
+  palette: GBPalette;
+  fontUrl: string;
   scale?: number;
   padding?: number;
   qrSize?: number;
@@ -33,7 +33,9 @@ export const GB_PALETTES: GBPalette[] = [
   { name: "BGB", bgColor: "#e0f8cf", fgColor: "#071821" },
 ];
 
-export async function generateGBQR(options: GenerateOptions): Promise<GeneratedQR> {
+export async function generateGBQR(
+  options: GenerateOptions,
+): Promise<GeneratedQR> {
   const {
     title,
     subtitle,
@@ -76,13 +78,28 @@ export async function generateGBQR(options: GenerateOptions): Promise<GeneratedQ
 // Utilities
 // ------------------------------------------------------------
 
-async function loadFont(url: string) {
-  const font = new FontFace("GBFont", `url(${url})`);
-  await font.load();
-  (document as Document).fonts.add(font);
+let _fontLoadPromise: Promise<void> | null = null;
+
+export async function loadFont(url: string) {
+  if (_fontLoadPromise) return _fontLoadPromise;
+  _fontLoadPromise = (async () => {
+    try {
+      const font = new FontFace("PressStart2P", `url(${url})`);
+      await font.load();
+      (document as Document).fonts.add(font);
+      await (document as Document).fonts.ready;
+    } catch (err) {
+      console.warn("Font load failed:", err);
+      throw err;
+    }
+  })();
+  return _fontLoadPromise;
 }
 
-async function makeQRCanvas(data: string, size: number): Promise<HTMLCanvasElement> {
+async function makeQRCanvas(
+  data: string,
+  size: number,
+): Promise<HTMLCanvasElement> {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
@@ -161,14 +178,24 @@ function renderLayout(input: {
   // Draw QR code centered
   ctx.drawImage(qrCanvas, qrX, qrY);
 
-  // Draw title at top
-  ctx.font = "8px GBFont";
+  // Use the exact family name we load above
+  // tamaño 8px puede escalarse si quieres que sea más legible
+  ctx.font = "8px 'PressStart2P'";
   ctx.textAlign = "center";
   ctx.fillStyle = palette.fgColor;
-  ctx.fillText(title.toUpperCase(), GB_WIDTH / 2, 12 + padding);
+
+  // Ensure text baseline is consistent
+  ctx.textBaseline = "middle";
+
+  // Draw title at top (y ajustado)
+  ctx.fillText((title || "").toUpperCase(), GB_WIDTH / 2, 12 + padding);
 
   // Draw subtitle at bottom
-  ctx.fillText(subtitle.toUpperCase(), GB_WIDTH / 2, GB_HEIGHT - padding - 4);
+  ctx.fillText(
+    (subtitle || "").toUpperCase(),
+    GB_WIDTH / 2,
+    GB_HEIGHT - padding - 6,
+  );
 
   return canvas;
 }
@@ -186,5 +213,7 @@ function scaleCanvas(src: HTMLCanvasElement, scale: number): HTMLCanvasElement {
 }
 
 function canvasToPNG(canvas: HTMLCanvasElement): Promise<Blob> {
-  return new Promise((resolve) => canvas.toBlob(blob => resolve(blob!), "image/png"));
+  return new Promise((resolve) =>
+    canvas.toBlob((blob) => resolve(blob!), "image/png"),
+  );
 }

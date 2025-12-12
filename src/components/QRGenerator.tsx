@@ -1,75 +1,79 @@
-import { useState, useCallback, useRef, useEffect } from "react";
-import { generateGBQR, GB_PALETTES, GBPalette } from "@/lib/gb-qr";
+import { useEffect } from "react";
+import { IHistoryEntry, useHistory } from "@/hooks/useHistory";
+import { usePalette } from "@/hooks/usePalette";
+import { useBatch } from "@/hooks/useBatch";
+import { useQRGenerator } from "@/hooks/useQRGenerator";
+import { generateGBQR, GB_PALETTES, loadFont } from "@/lib/gb-qr";
+import { FONT_URL, safeName } from "@/utils/utils";
 import { toast } from "sonner";
-
-const FONT_URL =
-  "https://fonts.gstatic.com/s/pressstart2p/v15/e3t4euO8T-267oIAQAu6jDQyK3nVivM.woff2";
-const HISTORY_KEY = "gb-qr-history";
-
-interface HistoryEntry {
-  id: string;
-  title: string;
-  subtitle: string;
-  data: string;
-  palette: GBPalette;
-  scale: number;
-  padding: number;
-  qrSize: number;
-  createdAt: number;
-}
-
-function loadHistory(): HistoryEntry[] {
-  try {
-    const stored = localStorage.getItem(HISTORY_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(history: HistoryEntry[]) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 5)));
-}
+import JSZip from "jszip";
 
 export function QRGenerator() {
-  const [title, setTitle] = useState("GAME BOY");
-  const [subtitle, setSubtitle] = useState("SCAN ME");
-  const [data, setData] = useState("https://jimscope.com");
-  const [paletteIndex, setPaletteIndex] = useState(0);
-  const [useCustomPalette, setUseCustomPalette] = useState(false);
-  const [customBgColor, setCustomBgColor] = useState("#9bbc0f");
-  const [customFgColor, setCustomFgColor] = useState("#0f380f");
-  const [scale, setScale] = useState(1);
-  const [padding, setPadding] = useState(4);
-  const [qrSize, setQrSize] = useState(64);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [donationsOpen, setDonationsOpen] = useState(false);
+  const { history, addToHistory, deleteFromHistory } = useHistory();
 
-  const lastGeneratedRef = useRef<{
-    exportPNG: () => Promise<Blob>;
-    exportBase64: () => string;
-  } | null>(null);
+  const {
+    paletteIndex,
+    setPaletteIndex,
+    useCustomPalette,
+    setUseCustomPalette,
+    customBgColor,
+    setCustomBgColor,
+    customFgColor,
+    setCustomFgColor,
+    getCurrentPalette,
+    resetToPreset,
+  } = usePalette();
+
+  const {
+    batchMode,
+    setBatchMode,
+    batchType,
+    setBatchType,
+    batchInput,
+    setBatchInput,
+    parsedCount,
+    zipMode,
+    setZipMode,
+    parseLines,
+    parseCSV,
+    handleCSVFile,
+  } = useBatch();
+
+  const {
+    title,
+    setTitle,
+    subtitle,
+    setSubtitle,
+    data,
+    setData,
+    scale,
+    setScale,
+    padding,
+    setPadding,
+    qrSize,
+    setQrSize,
+    isGenerating,
+    previewSrc,
+    setPreviewSrc,
+    donationsOpen,
+    setDonationsOpen,
+    lastGeneratedRef,
+    handleExportPNG,
+    handleCopyBase64,
+  } = useQRGenerator();
 
   useEffect(() => {
-    setHistory(loadHistory());
+    const savedHistory = JSON.parse(
+      localStorage.getItem("gbqr-history") || "[]",
+    );
   }, []);
 
-  const getCurrentPalette = useCallback((): GBPalette => {
-    if (useCustomPalette) {
-      return { name: "Custom", bgColor: customBgColor, fgColor: customFgColor };
-    }
-    return GB_PALETTES[paletteIndex];
-  }, [useCustomPalette, customBgColor, customFgColor, paletteIndex]);
-
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = async () => {
     if (!data.trim()) {
       toast.error("ENTER QR DATA!");
       return;
     }
 
-    setIsGenerating(true);
     try {
       const palette = getCurrentPalette();
       const result = await generateGBQR({
@@ -83,11 +87,16 @@ export function QRGenerator() {
         qrSize,
       });
 
-      lastGeneratedRef.current = result;
-      setPreviewSrc(result.exportBase64());
+      if (lastGeneratedRef.current) {
+        lastGeneratedRef.current.exportPNG = result.exportPNG;
+        lastGeneratedRef.current.exportBase64 = result.exportBase64;
+      }
 
-      // Add to history (keep up to 5 unique entries)
-      const entry: HistoryEntry = {
+      if (result.canvas) {
+        setPreviewSrc(result.exportBase64());
+      }
+
+      const entry = {
         id: Date.now().toString(),
         title,
         subtitle,
@@ -99,47 +108,15 @@ export function QRGenerator() {
         createdAt: Date.now(),
       };
 
-      setHistory((prevHistory) => {
-        const filteredHistory = prevHistory.filter(
-          (h) =>
-            !(h.data === data && h.title === title && h.subtitle === subtitle),
-        );
-        const newHistory = [entry, ...filteredHistory].slice(0, 5);
-        saveHistory(newHistory);
-        return newHistory;
-      });
-
+      addToHistory(entry);
       toast.success("QR GENERATED!");
     } catch (error) {
       console.error(error);
       toast.error("GENERATION FAILED!");
-    } finally {
-      setIsGenerating(false);
     }
-  }, [title, subtitle, data, getCurrentPalette, scale, padding, qrSize]);
+  };
 
-  const handleExportPNG = useCallback(async () => {
-    if (!lastGeneratedRef.current) return;
-
-    const blob = await lastGeneratedRef.current.exportPNG();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `gb-qr-${Date.now()}.png`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("PNG DOWNLOADED!");
-  }, []);
-
-  const handleCopyBase64 = useCallback(async () => {
-    if (!lastGeneratedRef.current) return;
-
-    const base64 = lastGeneratedRef.current.exportBase64();
-    await navigator.clipboard.writeText(base64);
-    toast.success("BASE64 COPIED!");
-  }, []);
-
-  const loadFromHistory = (entry: HistoryEntry) => {
+  const loadFromHistory = (entry: IHistoryEntry) => {
     setTitle(entry.title);
     setSubtitle(entry.subtitle);
     setData(entry.data);
@@ -147,27 +124,85 @@ export function QRGenerator() {
     setPadding(entry.padding);
     setQrSize(entry.qrSize);
 
-    const presetIndex = GB_PALETTES.findIndex(
-      (p) =>
-        p.bgColor === entry.palette.bgColor &&
-        p.fgColor === entry.palette.fgColor,
-    );
-    if (presetIndex >= 0) {
-      setUseCustomPalette(false);
-      setPaletteIndex(presetIndex);
-    } else {
-      setUseCustomPalette(true);
-      setCustomBgColor(entry.palette.bgColor);
-      setCustomFgColor(entry.palette.fgColor);
-    }
+    resetToPreset(entry.palette);
     toast.success("LOADED FROM HISTORY!");
   };
 
-  const deleteFromHistory = (id: string) => {
-    const newHistory = history.filter((h) => h.id !== id);
-    setHistory(newHistory);
-    saveHistory(newHistory);
-    toast.success("DELETED!");
+  const handleGenerateBatch = async () => {
+    const items =
+      batchType === "csv" ? parseCSV(batchInput) : parseLines(batchInput);
+    if (items.length === 0) {
+      toast.error("NO INPUT");
+      return;
+    }
+
+    try {
+      const palette = getCurrentPalette();
+
+      await loadFont(FONT_URL);
+
+      if (zipMode) {
+        const zip = new JSZip();
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          const itemTitle = it.title && it.title.length ? it.title : title;
+          const itemSubtitle =
+            it.subtitle && it.subtitle.length ? it.subtitle : subtitle;
+
+          const result = await generateGBQR({
+            title: itemTitle,
+            subtitle: itemSubtitle,
+            data: it.data,
+            palette,
+            fontUrl: FONT_URL,
+            scale,
+            padding,
+            qrSize,
+          });
+          const blob = await result.exportPNG();
+          zip.file(`${safeName(it.name)}.png`, blob);
+          await new Promise((r) => setTimeout(r, 6));
+        }
+        const zipBlob = await zip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `gbqr-batch-${Date.now()}.zip`;
+        a.click();
+        URL.revokeObjectURL(url);
+        toast.success(`EXPORTED ZIP WITH ${items.length} PNGS`);
+      } else {
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i];
+          const itemTitle = it.title && it.title.length ? it.title : title;
+          const itemSubtitle =
+            it.subtitle && it.subtitle.length ? it.subtitle : subtitle;
+
+          const result = await generateGBQR({
+            title: itemTitle,
+            subtitle: itemSubtitle,
+            data: it.data,
+            palette,
+            fontUrl: FONT_URL,
+            scale,
+            padding,
+            qrSize,
+          });
+          const blob = await result.exportPNG();
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${safeName(it.name)}.png`;
+          a.click();
+          URL.revokeObjectURL(url);
+          await new Promise((r) => setTimeout(r, 10));
+        }
+        toast.success(`EXPORTED ${items.length} PNGS`);
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("BATCH FAILED!");
+    }
   };
 
   const currentPalette = getCurrentPalette();
@@ -213,40 +248,42 @@ export function QRGenerator() {
             </h2>
 
             {/* Text Inputs */}
-            <div className="space-y-3">
-              <label className="block">
-                <span className="text-[8px] block mb-1">TITLE:</span>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="pixel-input"
-                  maxLength={12}
-                />
-              </label>
+            {!batchMode && (
+              <div className="space-y-3">
+                <label className="block">
+                  <span className="text-[8px] block mb-1">TITLE:</span>
+                  <input
+                    type="text"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="pixel-input"
+                    maxLength={12}
+                  />
+                </label>
 
-              <label className="block">
-                <span className="text-[8px] block mb-1">SUBTITLE:</span>
-                <input
-                  type="text"
-                  value={subtitle}
-                  onChange={(e) => setSubtitle(e.target.value)}
-                  className="pixel-input"
-                  maxLength={12}
-                />
-              </label>
+                <label className="block">
+                  <span className="text-[8px] block mb-1">SUBTITLE:</span>
+                  <input
+                    type="text"
+                    value={subtitle}
+                    onChange={(e) => setSubtitle(e.target.value)}
+                    className="pixel-input"
+                    maxLength={12}
+                  />
+                </label>
 
-              <label className="block">
-                <span className="text-[8px] block mb-1">QR DATA:</span>
-                <input
-                  type="text"
-                  value={data}
-                  onChange={(e) => setData(e.target.value)}
-                  className="pixel-input"
-                  placeholder="URL or text..."
-                />
-              </label>
-            </div>
+                <label className="block">
+                  <span className="text-[8px] block mb-1">QR DATA:</span>
+                  <input
+                    type="text"
+                    value={data}
+                    onChange={(e) => setData(e.target.value)}
+                    className="pixel-input"
+                    placeholder="URL or text..."
+                  />
+                </label>
+              </div>
+            )}
 
             {/* Palette Selection */}
             <div>
@@ -361,14 +398,94 @@ export function QRGenerator() {
               </label>
             </div>
 
-            {/* Generate Button */}
-            <button
-              onClick={handleGenerate}
-              disabled={isGenerating}
-              className="pixel-btn w-full py-3 text-sm"
-            >
-              {isGenerating ? "GENERATING..." : "GENERATE QR"}
-            </button>
+            {/* Batch */}
+            <div className="mt-2 space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-[8px]">
+                  <input
+                    type="checkbox"
+                    checked={batchMode}
+                    onChange={(e) => setBatchMode(e.target.checked)}
+                    className="w-3 h-3"
+                  />
+                  BATCH MODE
+                </label>
+                {batchMode && (
+                  <span className="text-[8px]">PARSED: {parsedCount}</span>
+                )}
+              </div>
+
+              {batchMode ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block">
+                      <span className="text-[8px] block mb-1">INPUT TYPE:</span>
+                      <select
+                        value={batchType}
+                        onChange={(e) =>
+                          setBatchType(e.target.value as "lines" | "csv")
+                        }
+                        className="pixel-select"
+                      >
+                        <option value="csv">CSV</option>
+                        <option value="lines">LINES</option>
+                      </select>
+                    </label>
+                    {batchType === "csv" && (
+                      <label className="block">
+                        <span className="text-[8px] block mb-1">CSV FILE:</span>
+                        <input
+                          type="file"
+                          accept=".csv,text/csv"
+                          onChange={(e) => handleCSVFile(e.target.files?.[0])}
+                          className="w-full text-[10px]"
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <label className="flex items-center gap-2 text-[8px]">
+                    <input
+                      type="checkbox"
+                      checked={zipMode}
+                      onChange={(e) => setZipMode(e.target.checked)}
+                      className="w-3 h-3"
+                    />
+                    ZIP DOWNLOAD
+                  </label>
+                  {batchType === "lines" && (
+                    <label className="block">
+                      <span className="text-[8px] block mb-1">PASTE HERE:</span>
+                      <textarea
+                        value={batchInput}
+                        onChange={(e) => setBatchInput(e.target.value)}
+                        className="pixel-input h-24"
+                        placeholder={
+                          "Formato: data,title,subtitle,name\n" +
+                          "Ejemplos:\n" +
+                          "https://example.com,GAME BOY,SCAN ME,example-qr\n" +
+                          "https://midominio.com,MY TITLE,MY SUBTITLE,qr-123"
+                        }
+                      />
+                    </label>
+                  )}
+                  <button
+                    onClick={handleGenerateBatch}
+                    disabled={isGenerating || parsedCount === 0}
+                    className="pixel-btn w-full py-3 text-sm"
+                  >
+                    {isGenerating ? "GENERATING..." : "GENERATE BATCH"}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleGenerate}
+                  disabled={isGenerating}
+                  className="pixel-btn w-full py-3 text-sm"
+                >
+                  {isGenerating ? "GENERATING..." : "GENERATE QR"}
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Preview Panel */}
@@ -414,7 +531,7 @@ export function QRGenerator() {
                   &gt; HISTORY
                 </h3>
                 <div className="space-y-1 max-h-[200px] overflow-y-auto">
-                  {history.map((entry) => (
+                  {history.map((entry: IHistoryEntry) => (
                     <div
                       key={entry.id}
                       className="flex items-center gap-1 sm:gap-2 p-2 bg-muted/50 border border-border text-[8px]"
