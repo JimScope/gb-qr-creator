@@ -57,7 +57,7 @@ export function QRGenerator() {
     setPreviewSrc,
     donationsOpen,
     setDonationsOpen,
-    lastGeneratedRef,
+    updatePreview,
     handleExportPNG,
     handleCopyBase64,
   } = useQRGenerator();
@@ -87,13 +87,8 @@ export function QRGenerator() {
         qrSize,
       });
 
-      if (lastGeneratedRef.current) {
-        lastGeneratedRef.current.exportPNG = result.exportPNG;
-        lastGeneratedRef.current.exportBase64 = result.exportBase64;
-      }
-
-      if (result.canvas) {
-        setPreviewSrc(result.exportBase64());
+      if (result) {
+        updatePreview(result);
       }
 
       const entry = {
